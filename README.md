@@ -7,7 +7,10 @@ Shamelessly using the GitHub template for this ;)
 - 📫 Drop me a DM or an email at lew@lew.ooo
 
 
-Use https://lew.ooo as your homepage!
+
+![lewisdoesstuff's GitHub stats](https://github-readme-stats.vercel.app/api?username=lewisdoesstuff&count_private=true&show_icons=true) 
+
+
 <!---
 lewisdoesstuff/lewisdoesstuff is a ✨ special ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 You can click the Preview link to take a look at your changes.
