@@ -1,8 +1,8 @@
 Shamelessly using the GitHub template for this ;)
 
 - 👋 Hi, I’m @lewisdoesstuff
-- 👀 I'm a C# Developer and Systems Administrator, with a whole lot of support work on top.
-- 🌱 My main projects currently relate to scripting/automation of PC deployments using FOG.
+- 👀 I'm an observability engineer, and Linux hobbist :)
+- 🌱 I don't really have any ongoing projects
 - 💞️ I’m down to collaborate on anything I'd find useful! Home automation, PC Deployments, and anything to make my life easier!
 - 📫 Drop me a DM or an email at lew@lew.ooo
 
