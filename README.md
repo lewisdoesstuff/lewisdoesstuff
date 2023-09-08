@@ -1,9 +1,9 @@
 Shamelessly using the GitHub template for this ;)
 
 - 👋 Hi, I’m @lewisdoesstuff
-- 👀 I'm an observability engineer, and Linux hobbist :)
+- 👀 I'm a full-stack dev :\)
 - 🌱 My only real finished project is [bento-next](https://github.com/lewisdoesstuff/bento-next) :)
-- 💞️ I’m down to collaborate on anything I'd find useful! Home automation, PC Deployments, and anything to make my life easier!
+- 💞️ I’m down to collaborate on anything I'd find useful!
 - 📫 Drop me a DM or an email at lew@lew.ooo
 
 
