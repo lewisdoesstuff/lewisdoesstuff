@@ -1,4 +1,36 @@
+import os
+import re
+import sys
+from datetime import datetime, timezone
+
+from chrome import THEMES, render_gif
+
+FPS = 15
+# Let the GitHub page show through the terminal body instead of the scheme's background
+TRANSPARENT_BODY = True
+
+# Usage: python main.py [dark|light]
+mode = sys.argv[1] if len(sys.argv) > 1 else "dark"
+theme = THEMES[mode]
+
+# gifos reads its config on import, so the color scheme must be set first
+os.environ["GIFOS_GENERAL_COLOR_SCHEME"] = theme["scheme"]
+if TRANSPARENT_BODY:
+    # Draw onto the page color so anti-aliased text edges blend with it
+    os.environ[f"GIFOS_{theme['scheme'].upper()}_DEFAULT_COLORS_BG"] = theme["page"]
+
 import gifos
+
+# ANSI colors, resolved by gifos to the active color scheme
+RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN = (f"\x1b[3{i}m" for i in range(1, 7))
+LABEL, VALUE, RESET = "\x1b[96m", "\x1b[93m", "\x1b[39m"
+
+OK = f"[  {GREEN}OK{RESET}  ]"
+FAILED = f"[{RED}FAILED{RESET}]"
+PROMPT = f"{MAGENTA}lewisdoesstuff{RESET}@{GREEN}github{RESET}:~$ "
+
+KERNEL = "6.11.0-lemmons"
+DISTRO = "lemmons linux"
 
 # Initialize the Terminal object
 t = gifos.Terminal(
@@ -10,145 +42,246 @@ t = gifos.Terminal(
 )
 
 # Set the frames per second
-t.set_fps(15)
+t.set_fps(FPS)
+t.set_prompt(PROMPT)
+
+# Row of the last printed line; gifos scrolls once we write past the bottom
+row = 0
 
 
-# Function to print a line of boot text with color
-def boot_line(text, row, delay=2, color="white", contin=False, save=True):
-    t.set_txt_color(color)
-    t.gen_text(text=text, row_num=row, contin=contin)
+def clear():
+    global row
+    t.clear_frame()
+    row = 0
+
+
+def println(text=" ", delay=0):
+    """Print a line below the previous one, like a console would."""
+    global row
+    row = min(row + 1, t.num_rows)
+    t.gen_text(text=text, row_num=row)
     t.clone_frame(delay)
-    if save:
-        t.save_frame(base_file_name=f"frame_{row}")
-    t.set_txt_color("white")
 
 
-# Function to print a line of init text with color
-def init_line(text, row, save=True):
-    t.gen_text("[ ", row_num=row)
-    t.set_txt_color("green")
-    t.gen_text("OK", row_num=row, contin=True)
-    t.set_txt_color("white")
-    t.gen_text(" ] ", row_num=row, contin=True)
-    t.gen_text(text=text, row_num=row, contin=True)
-    if save:
-        t.save_frame(base_file_name=f"frame_{row}")
+def print_block(lines, delay=0):
+    """Print several lines in a single frame. They must fit on screen without scrolling."""
+    global row
+    t.gen_text(text="\n".join(lines), row_num=row + 1)
+    row += len(lines)
+    t.clone_frame(delay)
 
 
-# Function to print `.. Done` with color
-def print_dots_done(row, delay=2):
-    boot_line(".", row, delay, contin=True)
-    boot_line(".", row, delay, contin=True)
-    boot_line(".", row, delay, contin=True)
-    boot_line(" Done", row, delay, contin=True, color="green")
+def rewrite(text, delay=0):
+    """Replace the last printed line, for progress counters and spinners."""
+    t.delete_row(row)
+    t.gen_text(text=text, row_num=row)
+    t.clone_frame(delay)
 
 
-# Simulate the boot process
-boot_line("lemmons ltd bios.js initializing", 1, delay=5)
-print_dots_done(1)
-boot_line("Hardware detection", 3, delay=2)
-print_dots_done(3)
+def command(text, speed=0.1, delay=5):
+    """Type a command at a fresh shell prompt."""
+    global row
+    row = min(row + 1, t.num_rows)
+    t.gen_prompt(row)
+    t.gen_typing_text(text=text, row_num=row, contin=True, speed=speed)
+    t.clone_frame(delay)
 
-boot_line("Hardware detected:", 4)
-boot_line("  CPU: js.core/V8 Compatible rendering engine", 5, delay=2)
-boot_line("  RAM: 256MiB", 6, delay=2)
-boot_line("  Display: 800x600 16-bit color GitHub Markdown Renderer", 7, delay=2)
-t.clone_frame(15)
 
-boot_line("Beginning memory test...", 9, delay=4)
+def dots_done(text, delay=2):
+    println(text, delay)
+    for dots in (".", "..", "..."):
+        rewrite(text + dots, delay)
+    rewrite(f"{text}... {GREEN}Done{RESET}", delay)
+
+
+def start_job(unit, description, seconds=4):
+    """systemd's bouncing `[ *** ]` spinner while a slow unit starts."""
+    positions = [
+        "*     ", "**    ", "***   ", " ***  ", "  *** ", "   ***", "    **", "     *",
+    ]
+    positions += positions[-2:0:-1]
+    println()
+    for i in range(seconds * FPS // 2):
+        stars = positions[i % len(positions)]
+        elapsed = i * 2 // FPS + 1
+        rewrite(
+            f"[{RED}{stars}{RESET}] A start job is running for {description} "
+            f"({elapsed}s / 1min 30s)",
+            delay=1,
+        )
+    rewrite(f"{OK} Started {description} ({unit}).", delay=2)
+
+
+# BIOS POST
+println("lemmons ltd bios.js v1.0", delay=5)
+println()
+dots_done("Hardware detection")
+println("Hardware detected:")
+println("  CPU: js.core/V8 Compatible rendering engine", delay=2)
+println("  RAM: 256MiB", delay=2)
+println("  Display: 800x600 16-bit color GitHub Markdown Renderer", delay=15)
+println()
 
 # Memory test simulation
+println("Beginning memory test...", delay=4)
 for i in range(0, 262144, 8192):  # 256MiB Memory
-    t.delete_row(9)
-    t.gen_text(f"Beginning memory test... {i}KiB", 9)
-
-t.delete_row(9)
-boot_line(f"Beginning memory test...", 9)
-boot_line(" 262144KiB OK", 9, color="green", contin=True)
-t.clone_frame(15)
-
-t.clear_frame()
-
-# Simulate the kernel boot process
-boot_line("lemmons ltd kernel.js initializing", 1)
-print_dots_done(1)
-init_line("Starting system...", 2)
-init_line("Initializing hardware...", 3)
-init_line("Checking filesystems...", 4)
-init_line("Mounting volumes...", 5)
-init_line("Starting networking service...", 6)
-init_line("Initializing display...", 7)
-t.gen_text("Welcome to lew's profile!", 9)
-t.clone_frame(15)
-t.clear_frame()
-
-# Simulate login prompt
-t.set_font("CascadiaCodePL.ttf", 15)
-t.gen_text(text="github login: ", row_num=1)
-t.gen_typing_text(text="lewisdoesstuff", row_num=1, col_num=14, contin=True, speed=0.1)
+    rewrite(f"Beginning memory test... {i}KiB")
+rewrite(f"Beginning memory test... {GREEN}262144KiB OK{RESET}", delay=10)
+println()
+dots_done("Booting from Hard Disk 0")
 t.clone_frame(10)
-t.gen_text(text="Password: ", row_num=2)
-t.gen_typing_text(text="********", row_num=2, col_num=10, contin=True, speed=0.1)
-t.clone_frame(15)
+clear()
 
-t.clear_frame()
-t.gen_text(text="Welcome, lewisdoesstuff! Last Login: 01-01-1970T00:00:01", row_num=1)
-t.set_prompt("\x1b[35mlewisdoesstuff\x1b[39m@\x1b[32mgithub\x1b[39m:~$ ")
-t.gen_prompt(2)
-t.gen_typing_text(text="ghfetch -u lewisdoesstuff", row_num=2, contin=True, speed=0.1)
+# Kernel log
+kernel_log = [
+    (0.000000, f"Linux version {KERNEL} (lew@github) (gcc 14.2.0) #1 SMP PREEMPT_DYNAMIC"),
+    (0.000000, f"Command line: BOOT_IMAGE=/vmlinuz-{KERNEL} root=/dev/gh0 ro quiet"),
+    (0.000000, "BIOS-provided physical RAM map:"),
+    (0.000000, "DMI: lemmons ltd GitHub Markdown Renderer, BIOS bios.js 01/01/1970"),
+    (0.004123, "Memory: 262144K/262144K available"),
+    (0.031337, "smpboot: CPU0: js.core/V8 Compatible rendering engine (family: 0x6)"),
+    (0.118274, "PCI: Using configuration type 1 for base access"),
+    (0.241930, "NET: Registered PF_INET protocol family"),
+    (0.302117, "octokit: GitHub API v4 (GraphQL) bridge registered"),
+    (0.412883, "usb 1-1: new high-speed USB device number 2 using xhci_hcd"),
+    (0.587210, "fbcon: githubfb (fb0) is primary device"),
+    (0.590014, "Console: switching to colour frame buffer device 100x37"),
+    (0.873456, "EXT4-fs (gh0): mounted filesystem with ordered data mode"),
+    (1.024567, "Run /sbin/init as init process"),
+]
+for timestamp, message in kernel_log:
+    println(f"[{timestamp:12.6f}] {message}")
+t.clone_frame(5)
 
+# systemd
+println()
+println(f"Welcome to {BLUE}{DISTRO}{RESET}!", delay=8)
+println()
+println(f"{OK} Created slice Slice /system/getty.", delay=2)
+println(f"{OK} Reached target Local File Systems.", delay=2)
+println("         Starting Journal Service...", delay=3)
+rewrite(f"{OK} Started Journal Service.", delay=2)
+println(f"{OK} Mounted /home/lewisdoesstuff.", delay=2)
+println("         Starting Network Manager...", delay=4)
+rewrite(f"{OK} Started Network Manager.", delay=2)
+println(f"{OK} Reached target Network.", delay=2)
+start_job("ghstatsd.service", "GitHub Stats Daemon")
+println(f"{FAILED} Failed to start Coffee Machine Service.", delay=2)
+println("See 'systemctl status coffee.service' for details.", delay=6)
+println(f"{OK} Started Getty on tty1.", delay=2)
+println(f"{OK} Reached target Login Prompts.", delay=2)
+println(f"{OK} Reached target Multi-User System.", delay=15)
+clear()
+
+# getty login on tty1
+t.set_font("CascadiaCodePL.ttf", 15)
+println()
+println(f"{DISTRO} {KERNEL} (tty1)")
+println()
+println("github login: ", delay=5)
+t.gen_typing_text(text="lewisdoesstuff", row_num=row, contin=True, speed=0.1)
+t.clone_frame(5)
+# Passwords aren't echoed, so just let the cursor sit there for a moment
+println("Password: ")
+t.gen_text(text="", row_num=row, contin=True, count=20)
+last_login = datetime.now(timezone.utc).strftime("%a %b %e %H:%M:%S")
+println(f"Last login: {last_login} on tty1", delay=10)
+
+# Fetch-style stats, with neofetch's Linux logo beside them
+command("ghfetch", delay=3)
 gh_stats = gifos.utils.fetch_github_stats("lewisdoesstuff")
-details_lines = f"""\x1b[96mUser Rating: \x1b[93m{gh_stats.user_rank.level}\x1b[0m
-\x1b[96mTotal Stars Earned: \x1b[93m{gh_stats.total_stargazers}\x1b[0m
-\x1b[96mTotal Commits (2023): \x1b[93m{gh_stats.total_commits_last_year}\x1b[0m
-\x1b[96mTotal PRs: \x1b[93m{gh_stats.total_pull_requests_made}\x1b[0m
-\x1b[96mMerged PR %: \x1b[93m{gh_stats.pull_requests_merge_percentage}\x1b[0m
-\x1b[96mTotal Contributions: \x1b[93m{gh_stats.total_repo_contributions}\x1b[0m
+
+# Copied from neofetch (MIT): https://github.com/dylanaraps/neofetch
+NEOFETCH_LINUX = r"""
+${c2}        #####
+${c2}       #######
+${c2}       ##${c1}O${c2}#${c1}O${c2}##
+${c2}       #${c3}#####${c2}#
+${c2}     ##${c1}##${c3}###${c1}##${c2}##
+${c2}    #${c1}##########${c2}##
+${c2}   #${c1}############${c2}##
+${c2}   #${c1}############${c2}###
+${c3}  ##${c2}#${c1}###########${c2}##${c3}#
+${c3}######${c2}#${c1}#######${c2}#${c3}######
+${c3}#######${c2}#${c1}#####${c2}#${c3}#######
+${c3}  #####${c2}#######${c3}#####
 """
-t.gen_text(text=details_lines, row_num=3)
+# neofetch's `set_colors fg 8 3`, with white rather than fg so the belly stays
+# light on the light theme too
+logo_colors = {"${c1}": "\x1b[37m", "${c2}": "\x1b[90m", "${c3}": YELLOW}
+logo = []
+for line in NEOFETCH_LINUX.strip("\n").splitlines():
+    width = len(re.sub(r"\$\{c\d\}", "", line))
+    for token, color in logo_colors.items():
+        line = line.replace(token, color)
+    logo.append(line + " " * (24 - width))
 
-t.gen_prompt(9)
-t.gen_typing_text(
-    text="cat /proc/languages | head -n 4", row_num=9, contin=True, speed=0.1
-)
-t.gen_text(text="\x1b[34mTypeScript", row_num=10)
-t.gen_text(text="\x1b[33mJavaScript", row_num=11)
-t.gen_text(text="\x1b[34mPython", row_num=12)
-t.gen_text(text="\x1b[32mC#", row_num=13)
+info = [
+    PROMPT.removesuffix(":~$ "),
+    "-" * len("lewisdoesstuff@github"),
+    f"{LABEL}OS{RESET}: {DISTRO} {KERNEL}",
+    f"{LABEL}User Rating{RESET}: {VALUE}{gh_stats.user_rank.level}",
+    f"{LABEL}Total Stars Earned{RESET}: {VALUE}{gh_stats.total_stargazers}",
+    f"{LABEL}Commits (past year){RESET}: {VALUE}{gh_stats.total_commits_last_year}",
+    f"{LABEL}Total PRs{RESET}: {VALUE}{gh_stats.total_pull_requests_made}",
+    f"{LABEL}Merged PR %{RESET}: {VALUE}{gh_stats.pull_requests_merge_percentage}",
+    f"{LABEL}Total Contributions{RESET}: {VALUE}{gh_stats.total_repo_contributions}",
+    "",
+    "".join(f"\x1b[{c}m███" for c in range(30, 38)),
+]
+info += [""] * (len(logo) - len(info))
+print_block([f"{art}{line}{RESET}" for art, line in zip(logo, info)], delay=45)
 
-t.gen_prompt(14)
-t.gen_typing_text(
-    text="cat /proc/frameworks | head -n 2", row_num=14, contin=True, speed=0.1
-)
-t.gen_text(text="\x1b[32mVue", row_num=15)
-t.gen_text(text="\x1b[36mTailwindCSS", row_num=16)
+command("cat /proc/languages | head -n 4")
+println(f"{BLUE}TypeScript")
+println(f"{YELLOW}JavaScript")
+println(f"{BLUE}Python")
+println(f"{GREEN}C#", delay=15)
 
-t.gen_prompt(17)
-t.gen_typing_text(
-    text='echo "thanks for stopping by!" | cowsay', row_num=17, contin=True, speed=0.3
-)
+command("cat /proc/frameworks | head -n 2")
+println(f"{GREEN}Vue")
+println(f"{CYAN}TailwindCSS", delay=15)
+
+command('echo "thanks for stopping by!" | cowsay', speed=0.3)
 cowsay_output = r"""
- _________________________ 
+ _________________________
 < thanks for stopping by! >
- ------------------------- 
+ -------------------------
         \   ^__^
          \  (oo)\_______
             (__)\       )\/\
                 ||----w |
                 ||     ||
 """
-
-t.gen_text(text=cowsay_output, row_num=18, contin=True)
-t.gen_prompt(26)
+for line in cowsay_output.strip("\n").splitlines():
+    println(line)
+row = min(row + 1, t.num_rows)
+t.gen_prompt(row)
 t.clone_frame(60)
-t.gen_typing_text("reboot", 26, contin=True, speed=0.1)
+t.gen_typing_text("reboot", row, contin=True, speed=0.1)
 t.clone_frame(5)
-t.clear_frame()
-init_line("Stopping system...", 1)
-t.clone_frame(10)
-t.clear_frame()
-boot_line("System halted.", 1)
+clear()
+
+# systemd shutdown, then back to the BIOS when the GIF loops
+for line in [
+    "Stopped target Multi-User System.",
+    "Stopped GitHub Stats Daemon.",
+    "Stopped Network Manager.",
+    "Unmounted /home/lewisdoesstuff.",
+    "Reached target System Reboot.",
+]:
+    println(f"{OK} {line}", delay=2)
+println("reboot: Restarting system", delay=10)
+clear()
 t.clone_frame(10)
 
-# Generate the GIF
-t.gen_gif()
+# Wrap the frames in window chrome and generate the GIF
+render_gif(
+    frames_dir="frames",
+    out_path=f"output-{mode}.gif",
+    mode=mode,
+    title="lewisdoesstuff - GitHub",
+    font_path="CascadiaCodePL.ttf",
+    fps=FPS,
+    transparent_body=TRANSPARENT_BODY,
+)
